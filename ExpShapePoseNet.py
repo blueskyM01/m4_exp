@@ -13,6 +13,7 @@ import scipy.io as sio
 import ST_model_nonTrainable_AlexNetOnFaces as Pose_model
 import utils
 import csv
+import argparse
 
 sys.path.append('./ResNet')
 from ThreeDMM_shape import ResNet_101 as resnet101_shape
@@ -26,29 +27,29 @@ class m4_3DMM:
 
         # Get training image/labels mean/std for pose CNN
         try:
-            file = np.load("./fpn_new_model/perturb_Oxford_train_imgs_mean.npz", )
+            file = np.load(self.cfg.train_imgs_mean_file_path, )
             self.train_mean_vec = file["train_mean_vec"]  # [0,1]
-            print('Load perturb_Oxford_train_imgs_mean.npz successful....')
+            print('Load ' + self.cfg.train_imgs_mean_file_path + ' successful....')
         except:
-            raise Exception("fpn_new_model/perturb_Oxford_train_imgs_mean.npz Failed....")
+            raise Exception('Load ' + self.cfg.train_imgs_mean_file_path + ' failed....')
         del file
 
         try:
-            file = np.load("./fpn_new_model/perturb_Oxford_train_labels_mean_std.npz")
+            file = np.load(self.cfg.train_labels_mean_std_file_path)
             self.mean_labels = file["mean_labels"]
             self.std_labels = file["std_labels"]
-            print('Load perturb_Oxford_train_labels_mean_std.npz successful....')
+            print('Load ' + self.cfg.train_labels_mean_std_file_path + ' successful....')
         except:
-            raise Exception("perturb_Oxford_train_labels_mean_std.npz Failed....")
+            raise Exception('Load ' + self.cfg.train_labels_mean_std_file_path + ' failed....')
         del file
 
         try:
             # Get training image mean for Shape CNN
-            mean_image_shape = np.load('./Shape_Model/3DMM_shape_mean.npy')  # 3 x 224 x 224
+            mean_image_shape = np.load(self.cfg.ThreeDMM_shape_mean_file_path)  # 3 x 224 x 224
             self.mean_image_shape = np.transpose(mean_image_shape, [1, 2, 0])  # 224 x 224 x 3, [0,255]
-            print('Load 3DMM_shape_mean.npy successful....')
+            print('Load ' + self.cfg.ThreeDMM_shape_mean_file_path +' successful....')
         except:
-            raise Exception("3DMM_shape_mean.npy Failed....")
+            raise Exception('Load ' + self.cfg.ThreeDMM_shape_mean_file_path +' failed....')
         del mean_image_shape
 
     def extract_PSE_feats(self, x):
@@ -72,11 +73,11 @@ class m4_3DMM:
         # Face Pose-Net
         ###################
         try:
-            net_data = np.load("./fpn_new_model/PAM_frontal_ALexNet.npy", encoding="latin1").item()
+            net_data = np.load(self.cfg.PAM_frontal_ALexNet_file_path, encoding="latin1").item()
             pose_labels = np.zeros([self.cfg.batch_size, 6])
-            print('Load PAM_frontal_ALexNet.npy successful....')
+            print('Load ' + self.cfg.PAM_frontal_ALexNet_file_path+ ' successful....')
         except:
-            raise Exception("fpn_new_model/PAM_frontal_ALexNet.npy Failed....")
+            raise Exception('Load ' + self.cfg.PAM_frontal_ALexNet_file_path+ ' failed....')
         x1 = tf.image.resize_bilinear(x, tf.constant([227, 227], dtype=tf.int32))
 
         # Image normalization
@@ -109,10 +110,10 @@ class m4_3DMM:
             pool5 = tf.squeeze(pool5)
             pool5 = tf.reshape(pool5, [self.cfg.batch_size, -1])
             try:
-                npzfile = np.load('ResNet/ShapeNet_fc_weights.npz')
-                print('Load ShapeNet_fc_weights.npz successful....')
+                npzfile = np.load(self.cfg.ShapeNet_fc_weights_file_path)
+                print('Load ' + self.cfg.ShapeNet_fc_weights_file_path + ' successful....')
             except:
-                raise Exception("ResNet/ShapeNet_fc_weights.npz Failed....")
+                raise Exception('Load ' + self.cfg.ShapeNet_fc_weights_file_path + ' failed....')
 
             ini_weights_shape = npzfile['ini_weights_shape']
             ini_biases_shape = npzfile['ini_biases_shape']
@@ -131,12 +132,12 @@ class m4_3DMM:
             pool5 = tf.reshape(pool5, [self.cfg.batch_size, -1])
 
             try:
-                npzfile = np.load('ResNet/ExpNet_fc_weights.npz')
+                npzfile = np.load(self.cfg.ExpNet_fc_weights_file_path)
                 ini_weights_expr = npzfile['ini_weights_expr']
                 ini_biases_expr = npzfile['ini_biases_expr']
-                print('Load ResNet/ExpNet_fc_weights.npz successful....')
+                print('Load ' + self.cfg.ExpNet_fc_weights_file_path + '  successful....')
             except:
-                raise Exception("ResNet/ExpNet_fc_weights.npz Failed....")
+                raise Exception('Load ' + self.cfg.ExpNet_fc_weights_file_path + '  failed....')
 
             with tf.variable_scope('exprCNN_fc1'):
                 fc1we = tf.Variable(tf.reshape(ini_weights_expr, [2048, 29]), trainable=True, name='weights')
@@ -152,60 +153,99 @@ class m4_3DMM:
 
         # Load face pose net model from Chang et al.'ICCVW17
         try:
-            load_path = "./fpn_new_model/model_0_1.0_1.0_1e-07_1_16000.ckpt"
+            load_path = self.cfg.fpn_new_model_ckpt_file_path
             saver_pose.restore(self.sess, load_path)
-            print('Load face pose net model successful....')
+            print('Load ' + self.cfg.fpn_new_model_ckpt_file_path + ' successful....')
         except:
-            raise Exception("Load face pose net model Failed....")
-
+            raise Exception('Load ' + self.cfg.fpn_new_model_ckpt_file_path + ' failed....')
 
         # load 3dmm shape and texture model from Tran et al.' CVPR2017
         try:
-            load_path = "./Shape_Model/ini_ShapeTextureNet_model.ckpt"
+            load_path = self.cfg.Shape_Model_file_path
             saver_ini_shape_net.restore(self.sess, load_path)
-            print('load 3dmm shape and texture model successful....')
+            print('Load ' + self.cfg.Shape_Model_file_path + ' successful....')
         except:
-            raise Exception("load 3dmm shape and texture model Failed....")
+            raise Exception('Load ' + self.cfg.Shape_Model_file_path + ' failed....')
 
         # load our expression net model
         try:
-            load_path = "./Expression_Model/ini_exprNet_model.ckpt"
+            load_path = self.cfg.Expression_Model_file_path
             saver_ini_expr_net.restore(self.sess, load_path)
-            print('load 3dmm shape and texture model successful....')
+            print('Load ' + self.cfg.Expression_Model_file_path + ' successful....')
         except:
-            raise Exception("load 3dmm shape and texture model Failed....")
+            raise Exception('Load ' + self.cfg.Expression_Model_file_path + ' failed....')
 
         return fc1ls, fc1le, pose_model.preds_unNormalized
 
 
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--image_size", default=227, type=int, help="image_size")
+parser.add_argument("--num_gpus", default=1, type=int, help="num_gpus")
+parser.add_argument("--batch_size", default=2, type=int, help="batch_size")
+parser.add_argument("--mesh_folder", default='./output_ply', type=str, help="mesh_folder")
+
+parser.add_argument("--train_imgs_mean_file_path",
+                    default='/home/yang/My_Job/fpn_new_model/perturb_Oxford_train_imgs_mean.npz', type=str,
+                    help="Load perturb_Oxford_train_imgs_mean.npz")
+parser.add_argument("--train_labels_mean_std_file_path",
+                    default='/home/yang/My_Job/fpn_new_model/perturb_Oxford_train_labels_mean_std.npz', type=str,
+                    help="Load perturb_Oxford_train_labels_mean_std.npz")
+parser.add_argument("--ThreeDMM_shape_mean_file_path",
+                    default='/home/yang/My_Job/Shape_Model/3DMM_shape_mean.npy', type=str,
+                    help="Load 3DMM_shape_mean.npy")
+parser.add_argument("--PAM_frontal_ALexNet_file_path",
+                    default='/home/yang/My_Job/fpn_new_model/PAM_frontal_ALexNet.npy', type=str,
+                    help="Load PAM_frontal_ALexNet.npy")
+parser.add_argument("--ShapeNet_fc_weights_file_path",
+                    default='/home/yang/My_Job/study/Expression-Net/ResNet/ShapeNet_fc_weights.npz', type=str,
+                    help="Load ShapeNet_fc_weights.npz")
+parser.add_argument("--ExpNet_fc_weights_file_path",
+                    default='/home/yang/My_Job/study/Expression-Net/ResNet/ExpNet_fc_weights.npz', type=str,
+                    help="Load ResNet/ExpNet_fc_weights.npz")
+parser.add_argument("--fpn_new_model_ckpt_file_path",
+                    default='/home/yang/My_Job/fpn_new_model/model_0_1.0_1.0_1e-07_1_16000.ckpt', type=str,
+                    help="Load model_0_1.0_1.0_1e-07_1_16000.ckpt")
+parser.add_argument("--Shape_Model_file_path",
+                    default='/home/yang/My_Job/Shape_Model/ini_ShapeTextureNet_model.ckpt', type=str,
+                    help="Load ini_ShapeTextureNet_model.ckpt")
+parser.add_argument("--Expression_Model_file_path",
+                    default='/home/yang/My_Job/Expression_Model/ini_exprNet_model.ckpt', type=str,
+                    help="Load ini_exprNet_model.ckpt")
+parser.add_argument("--BaselFaceModel_mod_file_path",
+                    default='/home/yang/My_Job/Shape_Model/BaselFaceModel_mod.mat', type=str,
+                    help="Load BaselFaceModel_mod.mat")
+
+cfg = parser.parse_args()
 
 if __name__ == '__main__':
-    FLAGS = tf.app.flags.FLAGS
-    tf.app.flags.DEFINE_integer('image_size', 227, 'Image side length.')
-    tf.app.flags.DEFINE_integer('num_gpus', 1, 'Number of gpus used for training. (0 or 1)')
-    tf.app.flags.DEFINE_integer('batch_size', 2, 'Batch Size')
+    # FLAGS = tf.app.flags.FLAGS
+    # tf.app.flags.DEFINE_integer('image_size', 227, 'Image side length.')
+    # tf.app.flags.DEFINE_integer('num_gpus', 1, 'Number of gpus used for training. (0 or 1)')
+    # tf.app.flags.DEFINE_integer('batch_size', 2, 'Batch Size')
 
-    mesh_folder = './output_ply'  # The location where .ply files are saved
-    if not os.path.exists(mesh_folder):
-        os.makedirs(mesh_folder)
+    # mesh_folder = './output_ply'  # The location where .ply files are saved
+
+    if not os.path.exists(cfg.mesh_folder):
+        os.makedirs(cfg.mesh_folder)
 
     # placeholders for the batches
-    x = tf.placeholder(tf.float32, [FLAGS.batch_size, 227, 227, 3])
+    x = tf.placeholder(tf.float32, [cfg.batch_size, 227, 227, 3])
     with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         init_op = tf.global_variables_initializer()
         sess.run(init_op)
 
-        expr_shape_pose = m4_3DMM(sess, FLAGS)
+        expr_shape_pose = m4_3DMM(sess, cfg)
         fc1ls, fc1le, pose_model = expr_shape_pose.extract_PSE_feats(x)
 
         print('> Start to estimate Expression, Shape, and Pose!')
 
-        image = cv2.imread('/home/yang/My_Job/study/Expression-Net/subject4_a.jpg', 1)  # BGR
-        image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
-        image_size_h,image_size_w,nc = image.shape
+        image = cv2.imread('/home/yang/My_Job/study/Expression-Net/subject1_a.jpg', 1)  # BGR
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_size_h, image_size_w, nc = image.shape
         image = image / 127.5 - 1.0
 
-        image1 = cv2.imread('/home/yang/My_Job/study/Expression-Net/subject1_a.jpg', 1)  # BGR
+        image1 = cv2.imread('/home/yang/My_Job/study/Expression-Net/subject15_a.jpg', 1)  # BGR
         image1 = cv2.cvtColor(image1, cv2.COLOR_BGR2RGB)
         image_size_h, image_size_w, nc = image1.shape
         image1 = image1 / 127.5 - 1.0
@@ -218,19 +258,17 @@ if __name__ == '__main__':
         image_np = np.reshape(image_np, [2, image_size_h, image_size_w, 3])
 
         (Shape_Texture, Expr, Pose) = sess.run([fc1ls, fc1le, pose_model], feed_dict={x: image_np})
-        print(Shape_Texture.shape)
 
         # -------------------------------make .ply file---------------------------------
         ## Modifed Basel Face Model
-        BFM_path = './Shape_Model/BaselFaceModel_mod.mat'
+        BFM_path = cfg.BaselFaceModel_mod_file_path
         model = scipy.io.loadmat(BFM_path, squeeze_me=True, struct_as_record=False)
         model = model["BFM"]
         faces = model.faces - 1
         print('> Loaded the Basel Face Model to write the 3D output!')
 
-
-        for i in range(FLAGS.batch_size):
-            outFile = mesh_folder + '/' + 'haha' + '_' + str(i)
+        for i in range(cfg.batch_size):
+            outFile = cfg.mesh_folder + '/' + 'haha' + '_' + str(i)
 
             Pose[i] = np.reshape(Pose[i], [-1])
             Shape_Texture[i] = np.reshape(Shape_Texture[i], [-1])
